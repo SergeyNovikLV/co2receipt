@@ -1,12 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Leaf, Recycle, Car, Package, Search, Lock, ExternalLink, Download, FileText, ChevronRight } from 'lucide-react'
-import { useSession } from 'next-auth/react'
+import { Leaf, Recycle, Car, Package, Search, Lock, ExternalLink, Download, FileText, ChevronRight, ClipboardList, Settings as SettingsIcon, Trophy, BadgeCheck, Plus, Menu, X, ChevronsLeft, User, Upload } from 'lucide-react'
+import { useSession, signIn, signOut } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
+import Empty from '@/components/Empty'
 
 const activities = [
   {
@@ -35,396 +38,629 @@ const activities = [
   },
 ]
 
-const recentReceipts = [
-  { id: 1, name: 'Community clean-up', status: 'Verified', co2e: '45 kg', date: '2025-08-12', verified: true },
-  { id: 2, name: 'Office carpool week', status: 'Pending', co2e: '28 kg', date: '2025-08-10', verified: false },
-  { id: 3, name: 'Beach cleanup', status: 'Verified', co2e: '67 kg', date: '2025-08-08', verified: true },
-]
+// Real data will be fetched; keep no hardcoded demo rows
+const recentReceiptsSeed: any[] = []
 
-const seasonData = [
-  { rank: 1, branch: 'Northside Branch', fairScore: 82.3, co2e: 123, quality: 1.2 },
-  { rank: 2, branch: 'Downtown Office', fairScore: 76.8, co2e: 98, quality: 1.0 },
-  { rank: 3, branch: 'Harbor District', fairScore: 71.2, co2e: 89, quality: 1.0 },
-  { rank: 4, branch: 'Tech Campus', fairScore: 68.9, co2e: 78, quality: 1.0 },
-  { rank: 5, branch: 'Green Valley', fairScore: 65.4, co2e: 71, quality: 1.0 },
-]
+const seasonDataSeed: any[] = []
 
 export default function AppPage() {
+  const router = useRouter()
   const { data: session } = useSession()
-  const isOrganizer = (session as any)?.role === 'organizer'
-  const [activeTab, setActiveTab] = useState('receipts')
+  const signedIn = Boolean(session)
+  const role = (session as any)?.user?.role ?? (session as any)?.role ?? 'organizer'
+  const userId = (session as any)?.user?.id ?? (session as any)?.id ?? 'me'
+  const isOrganizer = role === 'organizer'
+  const isParticipant = role === 'participant'
+  const isWitness = role === 'witness'
+  const isViewer = role === 'viewer'
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState('activities')
   const [selectedActivity, setSelectedActivity] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [recentReceipts, setRecentReceipts] = useState<any[]>(recentReceiptsSeed)
+  const [seasonData, setSeasonData] = useState<any[]>(seasonDataSeed)
+  const [queueItems] = useState([
+    {
+      id: 1,
+      title: 'Draft needs photos',
+      date: 'Today',
+      status: 'Action needed'
+    },
+    {
+      id: 2,
+      title: 'Pending approval',
+      date: 'Yesterday',
+      status: 'Awaiting'
+    }
+  ])
 
-  const filteredReceipts = recentReceipts.filter(receipt =>
-    receipt.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Mock activities state - in real app this would come from API/database
+  const [activities] = useState<any[]>([])
+  const hasActivities = activities.length > 0
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [activitiesTab, setActivitiesTab] = useState<'active'|'past'>('active')
+
+  // Route guard: redirect to /welcome if no session and no guest
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const guest = localStorage.getItem('guest') === '1'
+      if (!signedIn && !guest) {
+        router.replace('/welcome')
+      }
+    }
+  }, [signedIn, router])
+
+  const canActOnReceipt = (r: any): boolean => {
+    if (!userId) return false
+    const fields = [
+      r?.participants, r?.participantIds, r?.witnesses, r?.witnessIds, r?.assignees, r?.assignedToIds, r?.userIds
+    ].filter(Boolean) as any[]
+    return fields.some((list: any) => Array.isArray(list) && list.includes(userId))
+  }
+
+  const receiptsByRole = recentReceipts.filter((r: any) => {
+    if (isOrganizer || isViewer) return true
+    if (isParticipant || isWitness) return canActOnReceipt(r)
+    return false
+  })
+
+  const filteredReceipts = receiptsByRole.filter((receipt: any) =>
+    (receipt?.name ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  useEffect(() => {
+    // read tab from query
+    const tab = searchParams?.get('tab') as string | null
+    setActiveTab(tab === 'activities' || tab === 'receipts' || tab === 'cup' || tab === 'registry' ? tab : 'activities')
+  }, [searchParams])
+
+  useEffect(() => {
+    // collapse by default on <1024
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('sidebar.collapsed') : null
+    if (stored === '1') setIsCollapsed(true)
+    const handler = () => { if (window.innerWidth < 1024) setIsCollapsed(true) }
+    handler()
+    window.addEventListener('resize', handler)
+    const keyHandler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsCollapsed((v) => { localStorage.setItem('sidebar.collapsed', v ? '0' : '1'); return !v })
+      }
+    }
+    window.addEventListener('keydown', keyHandler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  useEffect(() => {
+    // Replace with real API calls when backend is connected
+    async function load() {
+      try {
+        const res = await fetch('/api/receipts').catch(() => undefined)
+        if (res?.ok) {
+          const data = await res.json()
+          setRecentReceipts(Array.isArray(data) ? data : [])
+        }
+      } catch {}
+
+      try {
+        const res = await fetch('/api/cup').catch(() => undefined)
+        if (res?.ok) {
+          const data = await res.json()
+          setSeasonData(Array.isArray(data) ? data : [])
+        }
+      } catch {}
+
+      try {
+        const res = await fetch('/api/queue').catch(() => undefined)
+        if (res?.ok) {
+          const data = await res.json()
+          setQueueItems(Array.isArray(data) ? data : [])
+        }
+      } catch {}
+    }
+    load()
+  }, [])
+
+  const navItems = [
+    { id: 'activities', label: 'Activities', icon: ClipboardList },
+    { id: 'receipts', label: 'Receipts', icon: FileText },
+    { id: 'cup', label: 'CO₂ Cup', icon: Trophy },
+    { id: 'registry', label: 'Registry & Badge', icon: BadgeCheck },
+    { id: 'settings', label: 'Settings', icon: SettingsIcon },
+    { id: 'profile', label: 'Profile', icon: User },
+  ] as const
+
+  const onNav = (id: string) => {
+    if (id === 'settings') { router.push('/app/settings'); return }
+    if (id === 'profile') { router.push('/app/profile'); return }
+    router.push(`/app?tab=${id}`, { scroll: false })
+  }
+
+  const tabLabel = activeTab === 'activities' ? 'Activities' : activeTab === 'cup' ? 'CO₂ Cup' : activeTab === 'registry' ? 'Registry & Badge' : 'Receipts'
+
   return (
-    <div className="max-w-[1200px] mx-auto px-6 overflow-x-hidden">
-      {/* Sticky Subheader */}
-      <div className="sticky top-[60px] z-20 bg-white border-b border-zinc-200 -mx-6 px-6 py-3 mb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <h1 className="text-2xl font-semibold text-zinc-900">Workspace</h1>
-            
-            {/* Segment Control Tabs */}
-            <div className="flex border-b border-zinc-200">
-              {[
-                { id: 'receipts', label: 'Receipts' },
-                { id: 'cup', label: 'CO₂ Cup' },
-                { id: 'registry', label: 'Registry & Badge' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-2 text-sm font-medium relative focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer ${
-                    activeTab === tab.id
-                      ? 'text-indigo-700 border-b-2 border-indigo-600'
-                      : 'text-zinc-600 hover:text-zinc-900'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+    <div className={`grid min-h-dvh items-start ${isCollapsed ? 'grid-cols-[72px_1fr]' : 'grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr]'}`}>
+      {/* Sidebar */}
+      <aside className={`hidden md:flex sticky top-0 self-start h-[100dvh] overflow-y-auto border-r border-zinc-200/40 bg-white flex-col justify-between ${isCollapsed ? 'w-[72px]' : 'w-[260px] xl:w-[280px]'} z-20`}>
+        <div className="p-4">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-start'} mb-4`}>
+            <button onClick={() => onNav('activities')} className="flex items-center gap-2 cursor-pointer">
+              <Leaf className="w-5 h-5 text-indigo-600" />
+              {!isCollapsed && <span className="font-semibold">CO₂ Receipt</span>}
+            </button>
           </div>
           
-          <div className="flex items-center gap-3">
-            <Button variant="outline" className="min-h-11">
-              <FileText size={16} className="mr-2" />
-              Import EPK
-            </Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 min-h-11">
-              New receipt
-            </Button>
+          <nav aria-label="Main" className="space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const selected = item.id === activeTab
+              if (item.id === 'settings' || item.id === 'profile') {
+                return (
+                  <button
+                    key={item.id}
+                    role="menuitem"
+                    aria-current={selected ? 'page' : undefined}
+                    onClick={() => onNav(item.id)}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`w-full h-11 flex items-center gap-3 px-3 rounded-[10px] text-sm cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${selected ? 'text-indigo-700 bg-indigo-50' : 'text-zinc-600 hover:text-zinc-800 hover:bg-zinc-50'}`}
+                  >
+                    <Icon className={`w-5 h-5 flex-shrink-0 ${selected ? 'text-indigo-600' : ''}`} />
+                    {!isCollapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                )
+              }
+              return (
+                <button
+                  key={item.id}
+                  role="menuitem"
+                  aria-current={selected ? 'page' : undefined}
+                  onClick={() => onNav(item.id)}
+                  title={isCollapsed ? item.label : undefined}
+                  className={`w-full h-11 flex items-center gap-3 px-3 rounded-[10px] text-sm cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${selected ? 'text-indigo-700 bg-indigo-50' : 'text-zinc-600 hover:text-zinc-800 hover:bg-zinc-50'}`}
+                >
+                  <Icon className={`w-5 h-5 flex-shrink-0 ${selected ? 'text-indigo-600' : ''}`} />
+                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                </button>
+              )
+            })}
+            
+            {/* Collapse button below Profile with 60px margin top */}
+            <div className="mt-[60px] flex justify-start">
+              <button 
+                onClick={() => { setIsCollapsed(v=>{const nv=!v; localStorage.setItem('sidebar.collapsed', nv?'1':'0'); return nv }) }} 
+                className="w-8 h-8 rounded-full border border-zinc-200 text-zinc-700 hover:bg-zinc-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2" 
+                title={isCollapsed? 'Expand' : 'Collapse'}
+              >
+                <ChevronsLeft className={`w-4 h-4 m-auto transition-transform ${isCollapsed ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+          </nav>
+        </div>
+        
+        {/* Remove the old collapse button from bottom */}
+      </aside>
+
+      {/* Mobile hamburger */}
+      <button className="md:hidden fixed left-3 top-[70px] z-30 bg-white/90 border border-zinc-200 rounded-md p-2 cursor-pointer" onClick={() => setMobileOpen(true)} aria-label="Open menu">
+        <Menu className="w-5 h-5" />
+      </button>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setMobileOpen(false)} />
+          <div className="absolute left-0 top-0 bottom-0 w-[240px] bg-white border-r border-zinc-200/40 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-semibold">Menu</span>
+              <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="cursor-pointer"><X className="w-5 h-5"/></button>
+            </div>
+            {navItems.slice(0,3).map((item)=>{
+              const Icon=item.icon as any
+              const selected=item.id===activeTab
+              return (
+                <button key={item.id} onClick={()=>{setMobileOpen(false); onNav(item.id)}} className={`w-full h-11 flex items-center gap-3 px-3 rounded-[10px] text-sm cursor-pointer transition-colors ${selected?'text-indigo-700 bg-indigo-50':'text-zinc-600 hover:text-zinc-800 hover:bg-zinc-50'}`}>
+                  <Icon className="w-5 h-5 flex-shrink-0"/>
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Left Column - 8 cols */}
-        <div className="col-span-12 lg:col-span-8 space-y-6">
-          {activeTab === 'receipts' && (
-            <>
-              {/* Templates */}
-              <div className="bg-white border border-zinc-200 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-zinc-900 mb-2">Templates</h2>
-                <p className="text-sm text-zinc-600 mb-6">Choose your activity type to start with the right form.</p>
-                
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  {[
-                    {
-                      id: 'cleanup',
-                      icon: Leaf,
-                      title: 'Clean-up',
-                      description: "We'll ask: bags (or kg), participants, time, GPS"
-                    },
-                    {
-                      id: 'carpool',
-                      icon: Car,
-                      title: 'Carpool day', 
-                      description: "We'll ask: trips, km per trip, passengers"
-                    },
-                    {
-                      id: 'upcycling',
-                      icon: Recycle,
-                      title: 'Upcycling',
-                      description: "We'll ask: items, material, baseline vs new use"
-                    },
-                    {
-                      id: 'zerowaste',
-                      icon: Package,
-                      title: 'Zero-waste event',
-                      description: "We'll ask: attendees, catering, disposables avoided"
-                    }
-                  ].map((activity) => {
-                    const Icon = activity.icon
-                    const isSelected = selectedActivity === activity.id
-                    return (
-                      <button
-                        key={activity.id}
-                        onClick={() => setSelectedActivity(activity.id)}
-                        className={`relative w-full h-24 p-4 border rounded-lg text-left transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${
-                          isSelected
-                            ? 'border-indigo-600 bg-indigo-50/30'
-                            : 'border-zinc-200 hover:bg-zinc-50'
-                        }`}
-                      >
-                        {isSelected && (
-                          <div className="absolute top-3 right-3 w-4 h-4 bg-indigo-600 rounded-full flex items-center justify-center">
-                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                          </div>
-                        )}
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                            <Icon size={16} className="text-indigo-600" />
-                          </div>
-                          <div>
-                            <h3 className="font-medium text-zinc-900">{activity.title}</h3>
-                            <p className="text-xs text-zinc-500 mt-1">{activity.description}</p>
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-                
-                {selectedActivity && (
-                  <Button className="bg-indigo-600 hover:bg-indigo-700">
-                    Continue
-                  </Button>
-                )}
-              </div>
-
-              {/* Recent Receipts Table */}
-              <div className="bg-white border border-zinc-200 rounded-lg">
-                <div className="p-6 border-b border-zinc-200">
-                  <h2 className="text-xl font-semibold text-zinc-900 mb-4">Recent receipts</h2>
-                  <div className="relative">
-                    <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
-                    <Input
-                      placeholder="Search receipts..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
+      {/* Main */}
+      <div className="min-w-0 overflow-y-auto" style={{ maxHeight: '100dvh' }}>
+        {/* Content */}
+        <div className="px-8 lg:px-10 py-8">
+          {/* Content Grid */}
+          <div className="max-w-[1360px] mx-auto">
+            <div className="grid grid-cols-12 gap-8">
+              {/* Left Column - 8 cols */}
+              <div className="col-span-12 lg:col-span-8 space-y-8">
+                {/* Top Actions Panel */}
+                <div className="flex items-start justify-between mb-6">
+                  <div className="space-y-2">
+                    <h1 className="text-[28px] leading-[34px] font-semibold text-zinc-900">
+                      {tabLabel}
+                    </h1>
+                    {activeTab === 'activities' && (
+                      <p className="text-[15px] leading-[22px] text-zinc-600">
+                        Create an activity, collect proof, and turn it into a verified CO₂ receipt.
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {activeTab === 'receipts' && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-10 rounded-xl"
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Import evidence (ZIP)
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-10 rounded-xl"
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Export CSV
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-zinc-200 text-left">
-                        <th className="px-6 py-3 text-xs font-medium text-zinc-500 uppercase tracking-wide">Name</th>
-                        <th className="px-6 py-3 text-xs font-medium text-zinc-500 uppercase tracking-wide">Status</th>
-                        <th className="px-6 py-3 text-xs font-medium text-zinc-500 uppercase tracking-wide">CO₂e</th>
-                        <th className="px-6 py-3 text-xs font-medium text-zinc-500 uppercase tracking-wide">Date</th>
-                        <th className="px-6 py-3 text-xs font-medium text-zinc-500 uppercase tracking-wide">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReceipts.map((receipt) => (
-                        <tr key={receipt.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                          <td className="px-6 py-4 text-sm text-zinc-900">{receipt.name}</td>
-                          <td className="px-6 py-4">
-                            <Badge 
-                              variant={receipt.verified ? "default" : "secondary"}
-                              className={receipt.verified 
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200" 
-                                : "bg-zinc-100 text-zinc-700 border-zinc-200"
+
+                {activeTab === 'activities' && (
+                  <>
+                    {/* Templates */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-[16px] leading-[20px] font-semibold text-zinc-900">Select activity type</h2>
+                      </div>
+                      <p className="text-[14px] leading-[20px] text-zinc-500 mb-6">Pick one to create a draft. You can edit details later.</p>
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {[
+                          {
+                            id: 'cleanup',
+                            icon: Leaf,
+                            title: 'Clean-up',
+                            description: "Record how much waste your team collected — get a CO₂ receipt.",
+                            microText: "Input: bags/kg • participants • time • GPS  —  Output: CO₂ avoided",
+                            active: true
+                          },
+                          {
+                            id: 'carpool',
+                            icon: Car,
+                            title: 'Carpool day', 
+                            description: "Track shared rides — see how much CO₂ you avoided.",
+                            microText: "Input: km • passengers • trips  —  Output: CO₂ avoided",
+                            active: true
+                          },
+                          {
+                            id: 'upcycling',
+                            icon: Recycle,
+                            title: 'Upcycling',
+                            description: "Coming soon",
+                            microText: "",
+                            active: false
+                          },
+                          {
+                            id: 'zerowaste',
+                            icon: Package,
+                            title: 'Zero-waste event',
+                            description: "Coming soon",
+                            microText: "",
+                            active: false
+                          },
+                        ].map((template) => (
+                          <button
+                            key={template.id}
+                            onClick={async () => {
+                              if (template.active) {
+                                try {
+                                  const response = await fetch('/api/activities/create', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({ type: template.id }),
+                                  })
+                                  
+                                  if (response.ok) {
+                                    const data = await response.json()
+                                    // Show toast notification
+                                    toast.success(`${template.title} created`)
+                                    // Redirect to the form
+                                    router.push(data.redirectUrl)
+                                  } else {
+                                    toast.error('Failed to create activity')
+                                  }
+                                } catch (error) {
+                                  console.error('Error creating activity:', error)
+                                  toast.error('Failed to create activity')
+                                }
                               }
-                            >
-                              {receipt.status}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-zinc-900">{receipt.co2e}</td>
-                          <td className="px-6 py-4 text-sm text-zinc-600">{receipt.date}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="ghost" onClick={() => toast("Report pack generated")} className="cursor-pointer">
-                                <Download size={14} />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={!isOrganizer}
-                                onClick={() => isOrganizer ? toast("Approved") : toast("Requires sign-in")}
-                                className={`relative ${!isOrganizer ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                              >
-                                {!isOrganizer && <Lock size={12} className="absolute -top-1 -left-1" />}
-                                Approve
-                              </Button>
+                            }}
+                            disabled={!template.active}
+                            className={`p-5 border border-zinc-200/60 rounded-2xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 h-full ${
+                              template.active 
+                                ? 'hover:bg-zinc-50 cursor-pointer bg-white hover:shadow-sm' 
+                                : 'opacity-60 cursor-not-allowed bg-zinc-50'
+                            }`}
+                            title={!template.active ? "Coming soon - In active development. Pilot Q4/2025." : `Create new ${template.title.toLowerCase()} activity`}
+                            aria-disabled={!template.active}
+                          >
+                            <div className="flex items-start gap-3 h-full">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${template.active ? 'bg-indigo-100' : 'bg-zinc-200'}`}>
+                                <template.icon className={`w-4 h-4 ${template.active ? 'text-indigo-600' : 'text-zinc-500'}`} />
+                              </div>
+                              <div className="flex-1 min-w-0 flex flex-col justify-between h-full">
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h3 className={`text-[16px] leading-[20px] font-semibold ${template.active ? 'text-zinc-900' : 'text-zinc-600'}`}>{template.title}</h3>
+                                    {!template.active && (
+                                      <span className="text-xs bg-zinc-200 text-zinc-700 px-2 py-1 rounded-full font-medium flex-shrink-0 ml-2">
+                                        Coming soon
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className={`text-[13px] leading-[18px] text-left ${template.active ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                    {template.description}
+                                  </p>
+                                </div>
+                                <div className="mt-3">
+                                  {template.microText ? (
+                                    <p className={`text-[11px] leading-[14px] text-left ${template.active ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                      {template.microText}
+                                    </p>
+                                  ) : (
+                                    <div className="h-[14px]"></div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
-
-          {activeTab === 'cup' && (
-            <div className="space-y-6">
-              <div className="bg-white border border-zinc-200 rounded-lg p-6">
-                <h2 className="text-2xl font-semibold text-zinc-900 mb-2">CO₂ Cup Leaderboard</h2>
-                <p className="text-sm text-zinc-600 mb-6">FairScore = verified CO₂e saved per head × Quality (1.0 or 1.2 with weigh tickets)</p>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-zinc-200">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">#</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Branch</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">FairScore</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">CO₂e</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Q×</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {seasonData.map((item) => (
-                        <tr key={item.rank} className="border-b border-zinc-100">
-                          <td className="px-4 py-3 text-sm font-mono text-zinc-900">{item.rank}</td>
-                          <td className="px-4 py-3 text-sm font-medium text-zinc-900">{item.branch}</td>
-                          <td className="px-4 py-3 text-lg font-semibold text-zinc-900">{item.fairScore}</td>
-                          <td className="px-4 py-3 text-sm text-zinc-600">{item.co2e} kg</td>
-                          <td className="px-4 py-3 text-sm text-zinc-600">×{item.quality}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'registry' && (
-            <div className="bg-white border border-zinc-200 rounded-lg p-6">
-              <h2 className="text-2xl font-semibold text-zinc-900 mb-6">Registry</h2>
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="border border-zinc-200 rounded-lg p-4">
-                    <div className="font-medium text-zinc-900 mb-2">Receipt #{i}</div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span className="text-zinc-500">Hash:</span>
-                        <span className="font-mono text-zinc-900 ml-1">ae12…b2e9</span>
+                          </button>
+                        ))}
                       </div>
-                      <div>
-                        <span className="text-zinc-500">Evidence:</span>
-                        <span className="text-zinc-900 ml-1">EPK</span>
+                    </div>
+
+                    {/* Active | Past tabs */}
+                    <div className="flex items-center gap-1 mb-4">
+                      <button
+                        onClick={() => setActivitiesTab('active')}
+                        className={`h-9 px-3 text-sm font-medium rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${activitiesTab === 'active' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
+                      >
+                        Active
+                      </button>
+                      <button
+                        onClick={() => setActivitiesTab('past')}
+                        className={`h-9 px-3 text-sm font-medium rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${activitiesTab === 'past' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
+                      >
+                        Past
+                      </button>
+                    </div>
+
+                    {/* Activities table */}
+                    <div className="bg-white border border-zinc-200/60 rounded-2xl overflow-hidden">
+                      <div className="px-6 py-4 border-b border-zinc-200/40 bg-zinc-50">
+                        <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900">Activities</h3>
                       </div>
-                      <div>
-                        <span className="text-zinc-500">Attestations:</span>
-                        <span className="text-zinc-900 ml-1">2/3</span>
+                      <div className="divide-y divide-zinc-200/40">
+                        {activitiesTab === 'active' ? (
+                          <div className="px-6 py-8 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 bg-zinc-100 rounded-full flex items-center justify-center">
+                              <ClipboardList className="w-6 h-6 text-zinc-400" />
+                            </div>
+                            <h4 className="text-[16px] leading-[20px] font-medium text-zinc-900 mb-2">No active activities yet</h4>
+                            <p className="text-[14px] leading-[20px] text-zinc-600">Pick a template above to start.</p>
+                          </div>
+                        ) : (
+                          <div className="px-6 py-8 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 bg-zinc-100 rounded-full flex items-center justify-center">
+                              <ClipboardList className="w-6 h-6 text-zinc-400" />
+                            </div>
+                            <h4 className="text-[16px] leading-[20px] font-medium text-zinc-900 mb-2">No past activities yet</h4>
+                            <p className="text-[14px] leading-[20px] text-zinc-600">Past activities will appear here</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'receipts' && (
+                  <>
+                    {/* Search */}
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <Input
+                          placeholder="Search receipts..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Receipts table */}
+                    <div className="bg-white border border-zinc-200/60 rounded-2xl overflow-hidden">
+                      <div className="px-6 py-4 border-b border-zinc-200/40 bg-zinc-50">
+                        <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900">Recent Receipts</h3>
+                      </div>
+                      <div className="divide-y divide-zinc-200/40">
+                        {filteredReceipts.length === 0 ? (
+                          <div className="px-6 py-8 text-center text-zinc-500">
+                            <p className="text-sm">Nothing here yet</p>
+                            <p className="text-xs mt-1">New receipts will appear here</p>
+                          </div>
+                        ) : (
+                          filteredReceipts.map((receipt) => (
+                            <div key={receipt.id} className="px-6 py-4 flex items-center justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-zinc-900">{receipt.name}</h4>
+                                <p className="text-sm text-zinc-600">{receipt.date}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge variant={receipt.status === 'Verified' ? 'default' : 'secondary'}>
+                                  {receipt.status}
+                                </Badge>
+                                <span className="text-sm text-zinc-600">{receipt.co2e}</span>
+                                <div className="flex items-center gap-2">
+                                  <Button variant="ghost" size="sm" title="Share">
+                                    <ExternalLink className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" title="Export">
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                  {canActOnReceipt(receipt) && (
+                                    <Button variant="ghost" size="sm" title="Approve">
+                                      <BadgeCheck className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'cup' && (
+                  <div className="space-y-6">
+                    <div className="bg-white border border-zinc-200/60 rounded-2xl p-6">
+                      <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900 mb-4">CO₂ Cup</h3>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-zinc-900">0</div>
+                          <div className="text-sm text-zinc-600">This month</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-zinc-900">0</div>
+                          <div className="text-sm text-zinc-600">Total</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-zinc-900">0</div>
+                          <div className="text-sm text-zinc-600">Rank</div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+                )}
 
-        {/* Right Column - 4 cols */}
-        <div className="col-span-12 lg:col-span-4 space-y-6">
-          {/* Your Queue */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-6">
-            <h3 className="text-base font-semibold text-zinc-900 mb-4">Your queue</h3>
-            
-            {/* Queue Items */}
-            <div className="space-y-3">
-              {/* Sample queue items */}
-              {[
-                { name: 'Community clean-up', status: 'Verified', co2e: '45 kg', date: '2025-08-12', type: 'verified' },
-                { name: 'Office carpool week', status: 'Pending', co2e: '28 kg', date: '2025-08-10', type: 'pending' },
-                { name: 'Beach cleanup', status: 'Verified', co2e: '67 kg', date: '2025-08-08', type: 'verified' }
-              ].map((item, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b border-zinc-100 last:border-0">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-zinc-900 truncate">{item.name}</div>
-                    <div className="text-xs text-zinc-500">{item.date}</div>
+                {activeTab === 'registry' && (
+                  <div className="space-y-6">
+                    <div className="bg-white border border-zinc-200/60 rounded-2xl p-6">
+                      <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900 mb-4">Registry & Badge</h3>
+                      <p className="text-[14px] leading-[20px] text-zinc-600">Registry and badge information will appear here.</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <Badge
-                      className={item.status === 'Verified'
-                        ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                        : "bg-zinc-100 text-zinc-700 border-zinc-200"
-                      }
-                    >
-                      {item.status}
-                    </Badge>
-                    <div className="text-xs text-zinc-500 min-w-0">{item.co2e}</div>
-                  </div>
+                )}
+              </div>
+
+              {/* Right Column - 4 cols */}
+              <div className="col-span-12 lg:col-span-4">
+                <div className="lg:sticky lg:top-8 space-y-6">
+                  {activeTab === 'activities' && (
+                    <>
+                      {/* Your queue - only show if there are activities */}
+                      {hasActivities && (
+                        <div className="bg-white border border-zinc-200/60 rounded-2xl p-6">
+                          <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900 mb-4">Your queue</h3>
+                          {queueItems.length === 0 ? (
+                            <div className="text-center text-zinc-500 py-2">
+                              <div className="w-8 h-8 mx-auto mb-2 bg-zinc-100 rounded-full flex items-center justify-center">
+                                <ClipboardList className="w-4 h-4 text-zinc-400" />
+                              </div>
+                              <p className="text-sm">No tasks yet</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {queueItems.map((item) => (
+                                <div key={item.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl">
+                                  <div>
+                                    <p className="font-medium text-sm text-zinc-900">{item.title}</p>
+                                    <p className="text-xs text-zinc-600">{item.date}</p>
+                                  </div>
+                                  <Badge variant="secondary">{item.status}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* This month KPI - only show if there are activities */}
+                      {hasActivities && (
+                        <div className="bg-white border border-zinc-200/60 rounded-2xl p-6">
+                          <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900 mb-4">This month</h3>
+                          <div className="space-y-3">
+                            <div className="bg-zinc-50 rounded-xl p-4 text-center">
+                              <div className="text-2xl font-bold text-zinc-900">0</div>
+                              <div className="text-sm text-zinc-600">Verified</div>
+                            </div>
+                            <div className="bg-zinc-50 rounded-xl p-4 text-center">
+                              <div className="text-2xl font-bold text-zinc-900">0</div>
+                              <div className="text-sm text-zinc-600">Pending</div>
+                            </div>
+                            <div className="bg-zinc-50 rounded-xl p-4 text-center">
+                              <div className="text-2xl font-bold text-zinc-900">0</div>
+                              <div className="text-sm text-zinc-600">CO₂e avoided</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Shortcuts - only show if there are activities */}
+                      {hasActivities && (
+                        <div className="bg-white border border-zinc-200/60 rounded-2xl p-6">
+                          <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900 mb-4">Shortcuts</h3>
+                          <div className="space-y-2">
+                            <a href="/app/registry" className="flex items-center justify-between text-sm text-zinc-600 hover:text-zinc-900">
+                              Registry & Badge
+                              <ChevronRight className="w-4 h-4" />
+                            </a>
+                            <a href="#" className="flex items-center justify-between text-sm text-zinc-600 hover:text-zinc-900">
+                              Export CSV
+                              <ChevronRight className="w-4 h-4" />
+                            </a>
+                            <a href="/factors/v2025.1" className="flex items-center justify-between text-sm text-zinc-600 hover:text-zinc-900">
+                              Factor set v2025.1
+                              <ChevronRight className="w-4 h-4" />
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {activeTab === 'receipts' && (
+                    <div className="bg-white border border-zinc-200/60 rounded-2xl p-6">
+                      <h3 className="text-[16px] leading-[20px] font-semibold text-zinc-900 mb-4">Quick links</h3>
+                      <div className="space-y-2">
+                        <a href="/factors/v2025.1" className="flex items-center justify-between text-sm text-zinc-600 hover:text-zinc-900">
+                          Factor set v2025.1
+                          <ChevronRight className="w-4 h-4" />
+                        </a>
+                        <a href="/app/settings" className="flex items-center justify-between text-sm text-zinc-600 hover:text-zinc-900">
+                          Settings
+                          <ChevronRight className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-            
-            {/* Empty state message */}
-            <div className="text-center py-6 text-sm text-zinc-500 border-t border-zinc-100 mt-4">
-              <div className="mb-2">No receipts yet.</div>
-              <button 
-                onClick={() => document.querySelector('[data-quick-start]')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-indigo-700 hover:text-indigo-800 hover:underline cursor-pointer"
-              >
-                Start with a guided demo →
-              </button>
-            </div>
-          </div>
-
-          {/* Key Metrics */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white border border-zinc-200 rounded-lg p-4">
-              <div className="text-xs text-zinc-500 mb-1">Verified</div>
-              <div className="text-2xl font-semibold text-zinc-900">24</div>
-              <div className="w-full h-1 bg-zinc-100 rounded-sm mt-2">
-                <div className="w-4/5 h-full bg-indigo-600 rounded-sm"></div>
               </div>
-            </div>
-            <div className="bg-white border border-zinc-200 rounded-lg p-4">
-              <div className="text-xs text-zinc-500 mb-1">Pending</div>
-              <div className="text-2xl font-semibold text-zinc-900">7</div>
-              <div className="w-full h-1 bg-zinc-100 rounded-sm mt-2">
-                <div className="w-1/3 h-full bg-indigo-600 rounded-sm"></div>
-              </div>
-            </div>
-            <div className="bg-white border border-zinc-200 rounded-lg p-4">
-              <div className="text-xs text-zinc-500 mb-1">CO₂e this month</div>
-              <div className="text-2xl font-semibold text-zinc-900">342kg</div>
-              <div className="w-full h-1 bg-zinc-100 rounded-sm mt-2">
-                <div className="w-3/4 h-full bg-indigo-600 rounded-sm"></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Season Snapshot */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-zinc-900">CO₂ Cup</h3>
-              <button className="text-sm text-indigo-700 hover:text-indigo-800 flex items-center gap-1 cursor-pointer">
-                View full table
-                <ChevronRight size={14} />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {seasonData.slice(0, 5).map((item) => (
-                <div key={item.rank} className="flex items-center justify-between py-2 border-b border-zinc-100 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono text-zinc-500">#{item.rank}</span>
-                    <span className="text-sm text-zinc-900">{item.branch}</span>
-                  </div>
-                  <div className="text-sm font-semibold text-zinc-900">{item.fairScore}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Links */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-6">
-            <h3 className="text-base font-semibold text-zinc-900 mb-4">Quick links</h3>
-            <div className="space-y-3">
-              <button className="w-full text-left text-sm text-indigo-700 hover:text-indigo-800 flex items-center justify-between cursor-pointer">
-                Registry & Badge
-                <ExternalLink size={14} />
-              </button>
-              <button className="w-full text-left text-sm text-indigo-700 hover:text-indigo-800 flex items-center justify-between cursor-pointer">
-                Export CSV
-                <Download size={14} />
-              </button>
-              <button className="w-full text-left text-sm text-indigo-700 hover:text-indigo-800 flex items-center justify-between cursor-pointer">
-                Factor set v2025.1
-                <ExternalLink size={14} />
-              </button>
             </div>
           </div>
         </div>
       </div>
-      
-      {/* Bottom spacing for footer */}
-      <div className="h-8"></div>
     </div>
   )
 }

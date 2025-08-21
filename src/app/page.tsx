@@ -1,5 +1,6 @@
-import { Hero } from "@/components/Hero";
+export const dynamic = 'force-dynamic'
+import { redirect } from 'next/navigation'
 
-export default function Home() {
-  return <Hero />;
+export default async function Home() {
+  redirect('/welcome')
 }

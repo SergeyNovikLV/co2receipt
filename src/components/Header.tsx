@@ -13,7 +13,7 @@ export default function Header() {
   const hasGoogle = Boolean(process.env.NEXT_PUBLIC_GOOGLE_ENABLED || (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET))
   return (
     <header className="sticky top-0 z-30 backdrop-blur bg-white/80 border-b">
-      <div className="mx-auto max-w-screen-xl px-4 md:px-6 py-3 flex items-center justify-between">
+      <div className="mx-auto max-w-screen-xl px-4 md:px-6 py-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Leaf className="w-6 h-6 text-indigo-600" />
           <Link href="/" className="font-semibold cursor-pointer">CO₂ Receipt</Link>

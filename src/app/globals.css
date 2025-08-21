@@ -124,6 +124,23 @@
     @apply bg-background text-foreground;
   }
   
+  /* Typography scale */
+  h1 {
+    @apply text-[28px] leading-[34px] font-semibold;
+  }
+  
+  .section-title {
+    @apply text-[14px] leading-[20px] font-semibold;
+  }
+  
+  .body-text {
+    @apply text-[14px] leading-[20px];
+  }
+  
+  .small-text {
+    @apply text-[12px] leading-[16px];
+  }
+  
   /* Allow text selection only in specific areas where copying is needed */
   .selectable-text,
   .receipt-id,
