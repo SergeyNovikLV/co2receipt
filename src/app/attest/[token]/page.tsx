@@ -1,8 +1,7 @@
-'use client'
-
 import { Button } from '@/components/ui/button'
 
-export default function AttestPage({ params }: { params: { token: string } }) {
+export default async function AttestPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Attestation</h1>
@@ -17,6 +16,7 @@ export default function AttestPage({ params }: { params: { token: string } }) {
     </div>
   )
 }
+
 
 
 

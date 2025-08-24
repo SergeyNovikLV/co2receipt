@@ -17,7 +17,7 @@ import {
   Calendar,
   MapPin,
   Users,
-  Leaf,
+  Car,
   Eye,
   Share2,
   Download,
@@ -29,7 +29,7 @@ import { format } from 'date-fns'
 
 interface Activity {
   id: string
-  type: 'cleanup'
+  type: 'carpool'
   status: 'draft' | 'active' | 'closed'
   name: string
   branch?: string
@@ -40,26 +40,24 @@ interface Activity {
   lat?: number
   lng?: number
   organizerEmail: string
-  outputMode: 'bags' | 'weight'
-  bagsCount?: number
-  avgKgPerBag?: number
-  totalWeight?: number
-  participants: number
+  distance: number
+  passengers: number
+  trips: number
+  fuelSaved: number
   photos: string[]
   tickets: string[]
   notes: string
-  hasWeighTickets: boolean
   createdAt: string
   updatedAt: string
 }
 
 const branches = ['Marketing', 'Engineering', 'Sales', 'HR', 'Other']
 
-export default function CleanupPage() {
+export default function CarpoolPage() {
   const router = useRouter()
   const [activity, setActivity] = useState<Activity>({
     id: 'new',
-    type: 'cleanup',
+    type: 'carpool',
     status: 'draft',
     name: '',
     branch: '',
@@ -70,15 +68,13 @@ export default function CleanupPage() {
     lat: undefined,
     lng: undefined,
     organizerEmail: 'organizer@example.com',
-    outputMode: 'bags',
-    bagsCount: 0,
-    avgKgPerBag: 2.5,
-    totalWeight: 0,
-    participants: 1,
+    distance: 0,
+    passengers: 1,
+    trips: 1,
+    fuelSaved: 0,
     photos: [],
     tickets: [],
     notes: '',
-    hasWeighTickets: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   })
@@ -87,24 +83,16 @@ export default function CleanupPage() {
 
   // Calculate CO₂e avoided
   const calculateCO2e = () => {
-    let kg = 0
-    if (activity.outputMode === 'bags' && activity.bagsCount && activity.avgKgPerBag) {
-      kg = activity.bagsCount * activity.avgKgPerBag
-    } else if (activity.outputMode === 'weight' && activity.totalWeight) {
-      kg = activity.totalWeight
-    }
-    // Factor for waste collection (example)
-    return kg * 0.5 // kg CO₂e per kg waste
+    // Factor for carpool (example: 0.2 kg CO₂e per km per passenger)
+    const totalPassengerKm = activity.distance * activity.passengers * activity.trips
+    return totalPassengerKm * 0.2
   }
 
   const co2eAvoided = calculateCO2e()
 
   // Validation
   const canStart = activity.name && activity.startDate && activity.endDate && activity.city && activity.place
-  const canClose = (activity.outputMode === 'bags' && activity.bagsCount && activity.avgKgPerBag) || 
-                   (activity.outputMode === 'weight' && activity.totalWeight) && 
-                   activity.participants >= 1 && 
-                   activity.photos.length >= 2
+  const canClose = activity.distance > 0 && activity.passengers >= 1 && activity.trips >= 1 && activity.photos.length >= 2
 
   const handleSave = () => {
     // Auto-save logic would go here
@@ -150,11 +138,11 @@ export default function CleanupPage() {
                     Activities
                   </button>
                   <span>/</span>
-                  <span>Clean-up</span>
+                  <span>Carpool day</span>
                 </div>
-                <h1 className="text-[32px] leading-[40px] font-semibold text-zinc-900">Clean-up</h1>
+                <h1 className="text-[32px] leading-[40px] font-semibold text-zinc-900">Carpool day</h1>
                 <p className="text-[14px] leading-[20px] text-zinc-600">
-                  Collect facts, add evidence, close to generate a verified CO₂ receipt.
+                  Track shared rides — see how much CO₂ you avoided.
                 </p>
               </div>
               
@@ -199,7 +187,7 @@ export default function CleanupPage() {
                     id="name"
                     value={activity.name}
                     onChange={(e) => setActivity(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Park cleanup event"
+                    placeholder="e.g., Team carpool to office"
                     className="mt-2 h-11 rounded-lg"
                   />
                 </div>
@@ -300,91 +288,64 @@ export default function CleanupPage() {
               <h2 className="text-[20px] leading-[28px] font-semibold text-zinc-900">Output</h2>
               
               <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <Label className="text-[14px] leading-[20px] font-medium text-zinc-900">Mode:</Label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setActivity(prev => ({ ...prev, outputMode: 'bags' }))}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                        activity.outputMode === 'bags' 
-                          ? 'bg-indigo-50 text-indigo-700' 
-                          : 'text-zinc-600 hover:text-zinc-800'
-                      }`}
-                    >
-                      Bags
-                    </button>
-                    <button
-                      onClick={() => setActivity(prev => ({ ...prev, outputMode: 'weight' }))}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                        activity.outputMode === 'weight' 
-                          ? 'bg-indigo-50 text-indigo-700' 
-                          : 'text-zinc-600 hover:text-zinc-800'
-                      }`}
-                    >
-                      Weight
-                    </button>
-                  </div>
-                </div>
-
-                {activity.outputMode === 'bags' ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="bagsCount" className="text-[14px] leading-[20px] font-medium text-zinc-900">
-                        Bags count *
-                      </Label>
-                      <Input
-                        id="bagsCount"
-                        type="number"
-                        min="1"
-                        value={activity.bagsCount || ''}
-                        onChange={(e) => setActivity(prev => ({ ...prev, bagsCount: parseInt(e.target.value) || 0 }))}
-                        className="mt-2 h-11 rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="avgKg" className="text-[14px] leading-[20px] font-medium text-zinc-900">
-                        Average kg per bag
-                      </Label>
-                      <Input
-                        id="avgKg"
-                        type="number"
-                        step="0.1"
-                        min="0.1"
-                        value={activity.avgKgPerBag || ''}
-                        onChange={(e) => setActivity(prev => ({ ...prev, avgKgPerBag: parseFloat(e.target.value) || 0 }))}
-                        className="mt-2 h-11 rounded-lg"
-                      />
-                    </div>
-                  </div>
-                ) : (
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="totalWeight" className="text-[14px] leading-[20px] font-medium text-zinc-900">
-                      Total weight, kg *
+                    <Label htmlFor="distance" className="text-[14px] leading-[20px] font-medium text-zinc-900">
+                      Distance, km *
                     </Label>
                     <Input
-                      id="totalWeight"
+                      id="distance"
                       type="number"
                       step="0.1"
                       min="0.1"
-                      value={activity.totalWeight || ''}
-                      onChange={(e) => setActivity(prev => ({ ...prev, totalWeight: parseFloat(e.target.value) || 0 }))}
+                      value={activity.distance || ''}
+                      onChange={(e) => setActivity(prev => ({ ...prev, distance: parseFloat(e.target.value) || 0 }))}
                       className="mt-2 h-11 rounded-lg"
                     />
                   </div>
-                )}
+                  <div>
+                    <Label htmlFor="passengers" className="text-[14px] leading-[20px] font-medium text-zinc-900">
+                      Passengers *
+                    </Label>
+                    <Input
+                      id="passengers"
+                      type="number"
+                      min="1"
+                      value={activity.passengers}
+                      onChange={(e) => setActivity(prev => ({ ...prev, passengers: parseInt(e.target.value) || 1 }))}
+                      className="mt-2 h-11 rounded-lg"
+                    />
+                  </div>
+                </div>
 
-                <div>
-                  <Label htmlFor="participants" className="text-[14px] leading-[20px] font-medium text-zinc-900">
-                    Participants *
-                  </Label>
-                  <Input
-                    id="participants"
-                    type="number"
-                    min="1"
-                    value={activity.participants}
-                    onChange={(e) => setActivity(prev => ({ ...prev, participants: parseInt(e.target.value) || 1 }))}
-                    className="mt-2 h-11 rounded-lg"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="trips" className="text-[14px] leading-[20px] font-medium text-zinc-900">
+                      Number of trips *
+                    </Label>
+                    <Input
+                      id="trips"
+                      type="number"
+                      min="1"
+                      value={activity.trips}
+                      onChange={(e) => setActivity(prev => ({ ...prev, trips: parseInt(e.target.value) || 1 }))}
+                      className="mt-2 h-11 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="fuelSaved" className="text-[14px] leading-[20px] font-medium text-zinc-900">
+                      Fuel saved, L
+                    </Label>
+                    <Input
+                      id="fuelSaved"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={activity.fuelSaved || ''}
+                      onChange={(e) => setActivity(prev => ({ ...prev, fuelSaved: parseFloat(e.target.value) || 0 }))}
+                      className="mt-2 h-11 rounded-lg"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -431,34 +392,6 @@ export default function CleanupPage() {
                 </div>
 
                 <div>
-                  <Label className="text-[14px] leading-[20px] font-medium text-zinc-900">
-                    Weigh tickets provided?
-                  </Label>
-                  <div className="mt-2 flex items-center gap-4">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="weighTickets"
-                        checked={activity.hasWeighTickets}
-                        onChange={() => setActivity(prev => ({ ...prev, hasWeighTickets: true }))}
-                        className="w-4 h-4 text-indigo-600"
-                      />
-                      <span className="text-[14px] leading-[20px] text-zinc-600">Yes</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="weighTickets"
-                        checked={!activity.hasWeighTickets}
-                        onChange={() => setActivity(prev => ({ ...prev, hasWeighTickets: false }))}
-                        className="w-4 h-4 text-indigo-600"
-                      />
-                      <span className="text-[14px] leading-[20px] text-zinc-600">No</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div>
                   <Label htmlFor="notes" className="text-[14px] leading-[20px] font-medium text-zinc-900">
                     Notes
                   </Label>
@@ -466,7 +399,7 @@ export default function CleanupPage() {
                     id="notes"
                     value={activity.notes}
                     onChange={(e) => setActivity(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Additional details about the activity..."
+                    placeholder="Additional details about the carpool..."
                     rows={3}
                     className="mt-2 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] leading-[20px] text-zinc-900"
                   />
@@ -502,7 +435,7 @@ export default function CleanupPage() {
                     <Info className="w-5 h-5 text-zinc-500" />
                     <span className="text-[14px] leading-[20px] text-zinc-600">Scope & method</span>
                   </div>
-                  <span className="text-[14px] leading-[20px] text-zinc-600">Waste collection C5</span>
+                  <span className="text-[14px] leading-[20px] text-zinc-600">Carpool C3</span>
                 </div>
               </div>
             </div>
@@ -554,9 +487,7 @@ export default function CleanupPage() {
                   <div>
                     <Label className="text-[14px] leading-[20px] font-medium text-zinc-900">Confidence</Label>
                     <div className="mt-2 p-3 bg-zinc-50 rounded-lg">
-                      <span className="text-[14px] leading-[20px] text-zinc-600">
-                        {activity.hasWeighTickets ? 'Weighed ×1.2' : 'Standard ×1.0'}
-                      </span>
+                      <span className="text-[14px] leading-[20px] text-zinc-600">Standard ×1.0</span>
                     </div>
                   </div>
 
@@ -601,7 +532,7 @@ export default function CleanupPage() {
                         disabled={!canClose}
                         variant="outline" 
                         className="w-full h-10 rounded-lg"
-                        title={!canClose ? "Need: output data, participants ≥1, photos ≥2" : undefined}
+                        title={!canClose ? "Need: distance >0, passengers ≥1, trips ≥1, photos ≥2" : undefined}
                       >
                         Close activity → Generate receipt
                       </Button>
@@ -627,7 +558,7 @@ export default function CleanupPage() {
                         onClick={handleClose}
                         disabled={!canClose}
                         className="w-full h-10 rounded-lg"
-                        title={!canClose ? "Need: output data, participants ≥1, photos ≥2" : undefined}
+                        title={!canClose ? "Need: distance >0, passengers ≥1, trips ≥1, photos ≥2" : undefined}
                       >
                         Close activity → Generate receipt
                       </Button>

@@ -4,9 +4,9 @@ export async function POST(request: NextRequest) {
   try {
     const { type } = await request.json()
     
-    if (!type || !['cleanup', 'carpool'].includes(type)) {
+    if (!type || !['cleanup', 'carpool', 'zerowaste'].includes(type)) {
       return NextResponse.json(
-        { error: 'Invalid activity type. Must be cleanup or carpool.' },
+        { error: 'Invalid activity type. Must be cleanup, carpool, or zerowaste.' },
         { status: 400 }
       )
     }
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       activity: newActivity,
-      redirectUrl: `/app/activities/${newActivity.id}/${type}`
+      redirectUrl: `/activities/${type}`
     })
     
   } catch (error) {

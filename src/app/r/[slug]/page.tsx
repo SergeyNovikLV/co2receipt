@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ShieldCheck, Copy, Download, Lock, ChevronDown, ChevronRight, CheckCircle, Circle, FileText, Camera, Trash2 } from 'lucide-react'
+import { ShieldCheck, Copy, Download, Lock, ChevronDown, ChevronRight, CheckCircle, Circle, FileText, Camera, Trash2, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function PublicReceipt({ params }: { params: { slug: string } }) {
@@ -20,56 +20,20 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
 
   return (
     <div className="max-w-[1040px] mx-auto p-6 overflow-x-hidden">
-      <div className="bg-white border border-zinc-200 rounded-lg">
-        {/* Top Bar - Two lines structure */}
-        <div className="px-6 py-6 border-b border-zinc-200">
-          {/* First line: ID + Status */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-zinc-500">Receipt ID</span>
-                <button
-                  onClick={() => copyToClipboard('CR-2025-08-00127', 'Receipt ID')}
-                  className="font-mono text-sm text-zinc-900 hover:text-indigo-700 transition-colors cursor-pointer selectable-text"
-                >
-                  CR-2025-08-00127
-                </button>
-                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => copyToClipboard('CR-2025-08-00127', 'Receipt ID')}>
-                  <Copy size={12} />
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-zinc-500">Issued</span>
-                <span className="text-sm text-zinc-900">12.08.2025 09:30 (UTC+2)</span>
-              </div>
-            </div>
-            <Badge
-              className={isVerified
-                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                : "bg-zinc-100 text-zinc-700 border-zinc-200"
-              }
-            >
-              <ShieldCheck size={12} className="mr-1" />
-              {isVerified ? 'Verified' : 'Pending'}
-            </Badge>
-          </div>
-          
-          {/* Second line: Actions */}
-          <div className="flex items-center gap-3">
-            <Button size="sm" variant="outline" className="h-8 px-3">Share link</Button>
-            <Button size="sm" variant="outline" className="h-8 px-3">Download evidence (ZIP)</Button>
-            {!isGuest && (
-              <Button
-                size="sm"
-                className="h-8 px-3 bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => toast("Approved (demo)")}
-              >
-                Approve
-              </Button>
-            )}
-          </div>
-        </div>
+      {/* Back Button */}
+      <div className="mb-6">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="h-10 px-3 hover:bg-zinc-100"
+          onClick={() => window.history.back()}
+        >
+          <ArrowLeft size={20} className="text-zinc-600 mr-2" />
+          Back
+        </Button>
+      </div>
 
+      <div className="bg-white border border-zinc-200 rounded-lg">
         {/* Hero Result */}
         <div className="px-6 py-8 border-b border-zinc-200">
           <h1 className="text-2xl md:text-3xl font-semibold text-zinc-900 mb-2">
@@ -368,6 +332,7 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
                                 fill="none"
                                 stroke="#e5e7eb"
                                 strokeWidth="8"
+                                strokeLinecap="butt"
                               />
                               <circle
                                 cx="50"
@@ -379,6 +344,7 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
                                 strokeDasharray={`${60 * 2.51} ${100 * 2.51}`}
                                 strokeDashoffset="0"
                                 className="transition-all duration-300"
+                                strokeLinecap="butt"
                               />
                               <circle
                                 cx="50"
@@ -390,6 +356,7 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
                                 strokeDasharray={`${25 * 2.51} ${100 * 2.51}`}
                                 strokeDashoffset={`-${60 * 2.51}`}
                                 className="transition-all duration-300"
+                                strokeLinecap="butt"
                               />
                               <circle
                                 cx="50"
@@ -398,11 +365,10 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
                                 fill="none"
                                 stroke="#22c55e"
                                 strokeWidth="8"
-                                strokeDasharray={`${10 * 2.51} ${100 * 2.51}`}
+                                strokeDasharray={`${10 * 2.51} 2 2`}
                                 strokeDashoffset={`-${85 * 2.51}`}
                                 className="transition-all duration-300"
-                                strokeLinecap="round"
-                                strokeDasharray={`${10 * 2.51} 2 2`}
+                                strokeLinecap="butt"
                               />
                               <circle
                                 cx="50"
@@ -414,6 +380,7 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
                                 strokeDasharray={`${5 * 2.51} ${100 * 2.51}`}
                                 strokeDashoffset={`-${95 * 2.51}`}
                                 className="transition-all duration-300"
+                                strokeLinecap="butt"
                               />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
@@ -485,16 +452,6 @@ export default function PublicReceipt({ params }: { params: { slug: string } }) 
                 </div>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-zinc-200 bg-zinc-50/50">
-          <div className="text-xs text-zinc-500 mb-2">
-            Evidence-based estimate of avoided CO₂e. Not a carbon credit or a financial audit. Verification-ready: factors & method published; evidence pack attached.
-          </div>
-          <div className="flex gap-4 text-xs">
-            <button className="text-indigo-700 hover:text-indigo-800 hover:underline cursor-pointer">Report issue</button>
           </div>
         </div>
       </div>
