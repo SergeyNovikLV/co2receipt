@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Leaf, ClipboardList, FileText, Trophy, Menu, X, ChevronsLeft, LayoutDashboard, LogOut } from 'lucide-react'
+import { Leaf, ClipboardList, FileText, Menu, X, ChevronsLeft, LogOut } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 
 export default function AppSectionLayout({ children }: { children: React.ReactNode }) {
@@ -21,10 +21,8 @@ export default function AppSectionLayout({ children }: { children: React.ReactNo
   }, [])
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/app/dashboard' },
     { id: 'activities', label: 'Activities', icon: ClipboardList, href: '/app/activities' },
     { id: 'receipts', label: 'Receipts', icon: FileText, href: '/app/receipts' },
-    { id: 'cup', label: 'CO₂ Cup', icon: Trophy, href: '/app/cup' },
   ] as const
 
   const isActive = (href: string) => pathname?.startsWith(href)
@@ -40,7 +38,7 @@ export default function AppSectionLayout({ children }: { children: React.ReactNo
       <aside className={`hidden md:flex sticky top-0 self-start h-[100dvh] overflow-y-auto border-r border-zinc-200/40 bg-white flex-col justify-between ${isCollapsed ? 'w-[72px]' : 'w-[260px] xl:w-[280px]'} z-20`}>
         <div className="p-4">
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-start'} mb-4`}>
-            <button onClick={() => onNav('/app/dashboard')} className="flex items-center gap-2 cursor-pointer">
+            <button onClick={() => onNav('/app/activities')} className="flex items-center gap-2 cursor-pointer">
               <Leaf className="w-5 h-5 text-indigo-600" />
               {!isCollapsed && <span className="font-semibold">CO₂ Receipt</span>}
             </button>

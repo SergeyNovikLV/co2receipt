@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -43,7 +43,17 @@ export default function NewActivityPage() {
 
   return (
     <div className="max-w-[760px] mx-auto px-8 md:px-10 py-10">
-      <h1 className="text-[32px] leading-[40px] font-semibold text-zinc-900 mb-6">Choose activity type</h1>
+      {/* Breadcrumb */}
+      <div className="text-xs text-zinc-500 -mt-2 mb-2 flex items-center gap-2">
+        <a href="/welcome" className="min-h-[28px] inline-flex items-center px-1 rounded hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Welcome</a>
+        <span className="mx-1">›</span>
+        <strong className="min-h-[28px] inline-flex items-center px-1 text-zinc-900">Activities</strong>
+      </div>
+
+      <div className="flex items-end justify-between mb-2">
+        <h1 className="text-[32px] leading-[40px] font-semibold text-zinc-900">Choose activity type</h1>
+        <div className="text-xs text-zinc-500">Step 1 of 2</div>
+      </div>
 
       <div className="space-y-4" role="radiogroup" aria-label="Choose activity type">
         {TYPES.map((t, i) => (
@@ -83,8 +93,8 @@ export default function NewActivityPage() {
         ))}
       </div>
 
-      <div className="sticky bottom-0 mt-6 pt-4 pb-2 bg-white">
-        <Button onClick={onCreate} disabled={!type || submitting} className="h-12 rounded-xl px-6 w-full md:w-auto">
+      <div className="sticky bottom-0 mt-6 pt-4 pb-2 bg-white flex justify-end">
+        <Button onClick={onCreate} disabled={!type || submitting} className="h-12 rounded-xl px-6">
           {submitting ? 'Creating…' : 'Continue'}
         </Button>
       </div>

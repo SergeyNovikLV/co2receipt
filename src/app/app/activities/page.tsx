@@ -42,20 +42,19 @@ export default function ActivitiesPage() {
   const handleCreateActivity = async (template: Template) => {
     if (template.active) {
       try {
-        const response = await fetch('/api/activities/create', {
+        const res = await fetch('/api/activities/new', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: template.id }),
         })
-        
-        if (response.ok) {
-          toast.success(`${template.title} created`)
-          router.push(`/activities/${template.id}`)
-        } else {
-          toast.error('Failed to create activity')
-        }
+        if (!res.ok) throw new Error('Failed to create')
+        const data = await res.json()
+        try {
+          localStorage.setItem(`activityTokens:${data.activityId}`, JSON.stringify(data))
+          localStorage.setItem(`activityMeta:${data.activityId}`, JSON.stringify({ type: template.id }))
+        } catch {}
+        toast.success(`${template.title} created`)
+        router.push(`/a/${data.activityId}?key=${data.organizerToken}`)
       } catch (error) {
         console.error('Error creating activity:', error)
         toast.error('Failed to create activity')
@@ -65,8 +64,15 @@ export default function ActivitiesPage() {
 
   return (
     <div className="space-y-8">
+      {/* Breadcrumb */}
+      <div className="text-xs text-zinc-500 mt-6 -mb-4 flex items-center gap-2">
+        <a href="/welcome" className="min-h-[28px] inline-flex items-center px-1 rounded hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Welcome</a>
+        <span className="mx-1">›</span>
+        <span className="min-h-[28px] inline-flex items-center px-1">Activities</span>
+      </div>
+
       {/* Page Header */}
-      <div className="pt-6">
+      <div className="pt-2">
         <h1 className="text-[32px] leading-[40px] font-semibold text-zinc-900">Activities</h1>
         <p className="text-[14px] leading-[20px] text-zinc-600 mt-2">Pick one to create an activity.</p>
       </div>
